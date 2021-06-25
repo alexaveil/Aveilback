@@ -1,2 +1,9 @@
 [gpt3]
 api_key = MY_TOKEN
+
+[database]
+uri = mongodb://USER:PASS@35.184.202.109:27017/chatbot_data
+database = chatbot_data
+users = users
+conversations = conversations
+answer_data = answer_data
