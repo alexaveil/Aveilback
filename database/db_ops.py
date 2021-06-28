@@ -23,5 +23,12 @@ users_collection = db[database_obj["users"]]
 conversations_collection = db[database_obj["conversations"]]
 answer_collection = db[database_obj["answer_data"]]
 
-x = users_collection.find()
-print(list(x))
+#User operations
+def find_user(user_dict):
+    return users_collection.find_one(user_dict)
+
+def register_user(user_dict):
+    users_collection.insert_one(user_dict)
+
+def update_interests(email, interests):
+    users_collection.update_one({'email': email},{'$set': {'interests': interests}}, upsert=False)
