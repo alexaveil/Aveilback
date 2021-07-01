@@ -7,3 +7,6 @@ database = chatbot_data
 users = users
 conversations = conversations
 responses_tagged_data = responses_tagged_data
+
+[certificates]
+path = certificates

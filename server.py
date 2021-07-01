@@ -19,6 +19,10 @@ from bson.objectid import ObjectId
 from flask_login import LoginManager, login_user
 import flask_login
 from database.user_model import User
+from config_parser import get_config_dict
+
+#Init config to get certificates path
+config_data = get_config_dict()
 
 #Start logger
 logger = logging.getLogger('Server')
@@ -285,12 +289,11 @@ if __name__ == "__main__":
     parser.add_argument('--run_local', action='store_true', help="If run local or not")
     parser.add_argument('--port', type=int, default=8000, help='Port for HTTP server (default: 8000)')
     parser.add_argument('--debug', action='store_true', help="If run with debugging or not")
-    parser.add_argument('--certificates_folder', default='certificates', help="Folder with SSL certs")
     args = vars(parser.parse_args())
     ip = "localhost" if args["run_local"] else "0.0.0.0"
     port = args["port"]
     debug = args["debug"]
-    certificates_folder = args["certificates_folder"]
+    certificates_folder = config_data["certificates"]["path"]
     # if debug
     if debug:
         app.debug = True
