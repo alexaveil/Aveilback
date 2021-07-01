@@ -5,7 +5,7 @@ import openai
 
 class GPT3Handler():
     def __init__(self,
-        engine="ada",
+        engine="davinci",
         temperature=0.50,
         max_tokens=100,
         frequency_penalty=0.15,

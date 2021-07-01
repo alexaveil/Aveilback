@@ -44,7 +44,7 @@ limiter = Limiter(app, key_func=get_remote_address, default_limits=["30 per minu
 #avoid limiting options requests
 limiter.request_filter(lambda: request.method.upper() == 'OPTIONS')
 #Init variable for questions
-MAX_QUESTIONS = 30
+MAX_QUESTIONS = 500
 
 #Callback used for loading users
 @login_manager.user_loader
