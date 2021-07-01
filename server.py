@@ -37,6 +37,7 @@ app.config['SECRET_KEY'] = "wzdSFHpyIhRCZOkWPTsiYT94EfXcW3KjYU898JmvDkU1i87Ipf4R
 #Initialize login
 login_manager = LoginManager()
 login_manager.init_app(app)
+login_manager.session_protection = "strong"
 
 #Additional elements
 gpt3_handler = GPT3Handler()
@@ -246,10 +247,11 @@ def select_question():
         user_interests = user["interests"]
         data_to_insert = []
         answers = question["answers"]
+        date = datetime.now()
         for i in range(4):
             index = i+1
             selected = index == option_selected
-            data = {"user_interests":user_interests, "question":question["question"], "answer":answers[i],"user_id":user_id, "question_id":ObjectId(question_id), "selected":selected}
+            data = {"user_interests":user_interests, "question":question["question"], "answer":answers[i],"user_id":user_id, "question_id":ObjectId(question_id), "selected":selected, "date": date}
             data_to_insert.append(data)
         add_response_tagging_data(data_to_insert)
     except Exception as e:

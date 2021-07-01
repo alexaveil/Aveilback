@@ -43,7 +43,7 @@ class GPT3Handler():
         if self.debug:
             print(answer)
         answer_text = answer.choices[0].text
-        return answer_text
+        return answer_text.strip()
 
 if __name__ == "__main__":
     gpt3 = GPT3Handler(debug=True)
