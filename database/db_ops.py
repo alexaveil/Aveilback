@@ -12,12 +12,14 @@ config = get_config_dict()
 database_obj = config["database"]
 uri = database_obj["uri"]
 database = database_obj["database"]
+
+path_certificates=config["certificates"]["path"]
 client = MongoClient(
     uri,
     ssl=True,
-    ssl_certfile='certificates/client.pem',
+    ssl_certfile=os.path.join(path_certificates,'client.pem'),
     ssl_cert_reqs=ssl.CERT_REQUIRED,
-    ssl_ca_certs='certificates/ca.pem')
+    ssl_ca_certs=os.path.join(path_certificates,'ca.pem'))
 db = client[database]
 
 #Define dbs
