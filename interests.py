@@ -1,0 +1,17 @@
+interests = ["Animals",
+"Food",
+"Sports",
+"Science",
+"Fashion",
+"Movies",
+"Cars",
+"Dance",
+"Music",
+"Fitness",
+"Memes",
+"Learning",
+"Art",
+"Tech",
+"Social Media",
+"Video Games"]
+interest_dict = {key: None for key in interests}

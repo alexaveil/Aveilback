@@ -1,4 +1,5 @@
 import re
+from interests import interest_dict
 
 def valid_email(email):
     email_regex = re.compile(r"[^@]+@[^@]+\.[^@]+")
@@ -23,7 +24,6 @@ def validate_interests(interest_list):
     if amount_interest < 3 or amount_interest > 5:
         return False
     #Check that values are in the category
-    interest_dict = {'Daily Life': None, 'Comedy': None, 'Entertainment': None, 'Beauty & Style': None, 'Animals': None, 'Food': None, 'Drama': None, 'Talent': None, 'Love & Dating': None, 'Learning': None, 'Family': None}
     for elem in interest_list:
         if elem not in interest_dict:
             return False

@@ -6,7 +6,7 @@ import openai
 class GPT3Handler():
     def __init__(self,
         engine="ada",
-        temperature=0,
+        temperature=0.50,
         max_tokens=100,
         frequency_penalty=0.15,
         debug=False,
@@ -24,6 +24,8 @@ class GPT3Handler():
         self.engine = engine
         self.frequency_penalty = frequency_penalty
         self.debug=debug
+        #To allow to save parameters
+        self.params_dict = {}
 
     def ask_question(self, question):
         prompt = self.default_prompt+question+"\nA: "
