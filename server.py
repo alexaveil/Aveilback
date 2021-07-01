@@ -2,6 +2,7 @@ import argparse
 from flask import Flask, request, jsonify
 from gevent.pywsgi import WSGIServer
 import gevent
+import os
 import time
 import logging
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, unset_jwt_cookies, set_access_cookies, get_jwt, get_jwt_identity, unset_access_cookies
@@ -300,14 +301,16 @@ if __name__ == "__main__":
     parser.add_argument('--run_local', action='store_true', help="If run local or not")
     parser.add_argument('--port', type=int, default=8000, help='Port for HTTP server (default: 8000)')
     parser.add_argument('--debug', action='store_true', help="If run with debugging or not")
+    parser.add_argument('--certificates_folder', default='certificates', help="Folder with SSL certs")
     args = vars(parser.parse_args())
     ip = "localhost" if args["run_local"] else "0.0.0.0"
     port = args["port"]
     debug = args["debug"]
+    certificates_folder = args["certificates_folder"]
     # if debug
     if debug:
         app.debug = True
 	# run app
-    http_server = WSGIServer((ip, port), app)
+    http_server = WSGIServer((ip, port), app, keyfile=os.path.join(certificates_folder, 'server.key'), certfile=os.path.join(certificates_folder, 'server.crt'))
     logger.info("Server started, running on {}:{}".format(ip, port))
     http_server.serve_forever()
