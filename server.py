@@ -20,6 +20,7 @@ from flask_login import LoginManager, login_user
 import flask_login
 from database.user_model import User
 from config_parser import get_config_dict
+from flask_sslify import SSLify
 
 #Init config to get certificates path
 config_data = get_config_dict()
@@ -42,6 +43,9 @@ app.config['SECRET_KEY'] = "wzdSFHpyIhRCZOkWPTsiYT94EfXcW3KjYU898JmvDkU1i87Ipf4R
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.session_protection = "strong"
+
+#Protect to not use http
+sslify = SSLify(app)
 
 #Additional elements
 gpt3_handler = GPT3Handler()

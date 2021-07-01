@@ -60,6 +60,7 @@ dependencies:
     - flask-jwt-extended==4.2.1
     - flask-limiter==1.4
     - flask-login==0.5.0
+    - flask-sslify==0.1.5
     - limits==1.5.1
     - pyjwt==2.1.0
 prefix: /home/nacho/anaconda3/envs/gpt_chatbot
