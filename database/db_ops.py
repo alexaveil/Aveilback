@@ -36,13 +36,13 @@ def find_user(user_dict, filter=[]):
     return result
 
 def register_user(user_dict):
-    users_collection.insert_one(user_dict)
+    return users_collection.insert_one(user_dict)
 
-def update_interests(email, interests):
-    users_collection.update_one({'email': email},{'$set': {'interests': interests}}, upsert=False)
+def update_interests(user_id, interests):
+    users_collection.update_one({'_id': user_id},{'$set': {'interests': interests}}, upsert=False)
 
-def update_queston_count(email, increase):
-    users_collection.find_one_and_update({'email': email}, {"$inc": {'question_count': increase}}, upsert=False)
+def update_queston_count(user_id, increase):
+    users_collection.find_one_and_update({'_id': user_id}, {"$inc": {'question_count': increase}}, upsert=False)
 
 #Conversations operations
 def add_question_with_answers(user_id, question, answers):

@@ -5,7 +5,6 @@ import gevent
 import os
 import time
 import logging
-from flask_jwt_extended import JWTManager, jwt_required, create_access_token, unset_jwt_cookies, set_access_cookies, get_jwt, get_jwt_identity, unset_access_cookies
 from database.db_ops import find_user, register_user, update_interests, update_queston_count, add_question_with_answers, get_question_by_id, select_response, add_response_tagging_data, get_messages
 import bcrypt
 from datetime import timedelta
@@ -17,6 +16,9 @@ from datetime import datetime
 import ast
 from gpt3 import GPT3Handler
 from bson.objectid import ObjectId
+from flask_login import LoginManager, login_user
+import flask_login
+from database.user_model import User
 
 #Start logger
 logger = logging.getLogger('Server')
@@ -30,35 +32,28 @@ logger.setLevel(logging.DEBUG)
 
 #Create server
 app = Flask(__name__)
-jwt = JWTManager(app)
+app.config['SECRET_KEY'] = "wzdSFHpyIhRCZOkWPTsiYT94EfXcW3KjYU898JmvDkU1i87Ipf4RrDaFMU1J"
+
+#Initialize login
+login_manager = LoginManager()
+login_manager.init_app(app)
+
+#Additional elements
 gpt3_handler = GPT3Handler()
 limiter = Limiter(app, key_func=get_remote_address, default_limits=["30 per minute", "1 per second"])
 #avoid limiting options requests
 limiter.request_filter(lambda: request.method.upper() == 'OPTIONS')
-# JWT Config
-app.config["JWT_COOKIE_SECURE"] = True
-app.config["JWT_TOKEN_LOCATION"] = ["cookies"]
-app.config["JWT_SECRET_KEY"] = "wzdSFHpyIhRCZOkWPTsiYT94EfXcW3KjYU898JmvDkU1i87Ipf4RrDaFMU1J"
-app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=1)
-app.config["SESSION_COOKIE_SAMESITE"]="Strict"
 #Init variable for questions
 MAX_QUESTIONS = 30
 
-# Using an `after_request` callback, we refresh any token that is within 30
-# minutes of expiring. Change the timedeltas to match the needs of your application.
-@app.after_request
-def refresh_expiring_jwts(response):
-    try:
-        exp_timestamp = get_jwt()["exp"]
-        now = datetime.now(timezone.utc)
-        target_timestamp = datetime.timestamp(now + timedelta(minutes=30))
-        if target_timestamp > exp_timestamp:
-            access_token = create_access_token(identity=get_jwt_identity())
-            set_access_cookies(response, access_token)
-        return response
-    except (RuntimeError, KeyError):
-        # Case where there is not a valid JWT. Just return the original respone
-        return response
+#Callback used for loading users
+@login_manager.user_loader
+def load_user(user_id):
+    user_data = find_user({"_id": ObjectId(user_id)})
+    if not user_data:
+        return
+    else:
+        return User(user_id)
 
 @app.route("/register", methods=["POST"])
 @limiter.limit("10/minute", override_defaults=False)
@@ -91,11 +86,16 @@ def register():
     hashed_pass = bcrypt.hashpw(password.encode('utf8'), bcrypt.gensalt())
     logger.info(hashed_pass)
     user_info = dict(first_name=first_name, last_name=last_name, email=email, password=hashed_pass, birth_date=birth_date, question_count=0)
-    register_user(user_info)
-    access_token = create_access_token(identity=email)
+    try:
+        user_entry = register_user(user_info)
+        if user_entry is None:
+            return jsonify(message="There was an error registering the user"), 500
+    except Exception as e:
+        return jsonify(message="There was an error registering the user"), 500
+    #Login user
+    user_id = user_entry.inserted_id
     response = jsonify(message="User added sucessfully")
-    set_access_cookies(response, access_token)
-    return response, 201
+    return response, 200
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -114,20 +114,17 @@ def login():
     except Exception as e:
         return jsonify(message="Couldn't access DB"), 500
     #Check password
-    logger.info(user)
     user_pass = user["password"]
     if bcrypt.checkpw(password.encode('utf8'), user_pass):
-        access_token = create_access_token(identity=email)
-        response = jsonify(message="Login Succeeded", access_token=access_token)
-        set_access_cookies(response, access_token)
-        return response, 200
+        login_user(User(str(user["_id"])))
+        return jsonify(message="Logged in successfully"), 200
     else:
         return jsonify(message="Bad Email or Password"), 401
 
 # Protect a route with jwt_required, which will kick out requests
 # without a valid JWT present.
 @app.route("/add_interests", methods=["POST"])
-@jwt_required()
+@flask_login.login_required
 def update_user_interests():
     #Check if interests provided
     if "interests" not in request.form:
@@ -142,26 +139,19 @@ def update_user_interests():
     #Validate interests content
     if not validate_interests(interests):
         return jsonify(message="Interests not valid, please check that the amount of interest is correct and that they are valid options"), 400
-    # Access the identity of the current user with get_jwt_identity
-    email = get_jwt_identity()
-    exists = find_user({"email": email})
-    #If user doesnt exist
-    if not exists:
-        return jsonify(message="User from session not found on db"), 401
     #Update interests to db
     try:
-        update_interests(email, interests)
+        update_interests(ObjectId(flask_login.current_user.get_id()), interests)
         return jsonify(message="User interests updated"), 200
     except Exception as e:
-        logger.warning(e)
+        logger.info(e)
         return jsonify(message="There was an error updating the interests to the database"), 500
 
 #Get user information
 @app.route("/user_info", methods=["GET"])
-@jwt_required()
+@flask_login.login_required
 def get_user_info():
-    email = get_jwt_identity()
-    user = find_user({"email": email}, filter=["_id","password"])
+    user = find_user({"_id": ObjectId(flask_login.current_user.id)}, filter=["_id","password"])
     if not user:
         return jsonify(message="User from session not found on db"), 401
     else:
@@ -170,7 +160,7 @@ def get_user_info():
 
 #Ask GPT3 a question
 @app.route("/ask_question", methods=["POST"])
-@jwt_required()
+@flask_login.login_required
 def ask_question():
     #Get question from request
     if not "question" in request.form:
@@ -179,12 +169,9 @@ def ask_question():
     #Validate that it is a string
     if not isinstance(question, str):
         return jsonify(message="Question is not a string"), 400
-    #Get jwt data
-    email = get_jwt_identity()
-    user = find_user({"email": email})
-    if not user:
-        return jsonify(message="User from session not found on db"), 401
     #Check that user has interests
+    user_id = ObjectId(flask_login.current_user.id)
+    user = find_user(user_id)
     if "interests" not in user:
         return jsonify(message="User doesn't have interests added"), 400
     #Check for question count
@@ -205,13 +192,12 @@ def ask_question():
         return jsonify(message="There was an error generating the question response"), 500
     #Update question count (TODO: Update with tokenizer count)
     try:
-        update_queston_count(email, 1) #This adds to question count, avoid overwriting between requests with wrong value
+        update_queston_count(user_id, 1) #This adds to question count, avoid overwriting between requests with wrong value
     except Exception as e:
         return jsonify(message="There was an error updating the response"), 500
     #Add question answer pair to find best collection, saving its
     #Update history of questions
     try:
-        user_id = user["_id"]
         result_conversation = add_question_with_answers(user_id, question, responses)
         if result_conversation is None:
             return jsonify(message="Inserting response failed"), 500
@@ -223,7 +209,7 @@ def ask_question():
 
 #Ask GPT3 a question
 @app.route("/select_question", methods=["POST"])
-@jwt_required()
+@flask_login.login_required
 def select_question():
     #Get question_id and option_selected
     for param in ["question_id", "option_selected"]:
@@ -236,13 +222,9 @@ def select_question():
     if (not option_selected.isdigit()) or (not 1 <= int(option_selected) <= 4):
         return jsonify(message="Option selected is not valid, must be an integer between 1 and 4"), 400
     option_selected = int(option_selected)
-    #Verify user
-    email = get_jwt_identity()
-    user = find_user({"email": email})
-    if not user:
-        return jsonify(message="User from session not found on db"), 401
     #Verify that the question corresponds to the user of the session, and that the question exists
-    user_id = user["_id"]
+    user_id = ObjectId(flask_login.current_user.id)
+    user = find_user({"_id":user_id})
     question = get_question_by_id(question_id)
     #Handle conversation not found
     if question is None:
@@ -257,7 +239,6 @@ def select_question():
     try:
         select_response(question_id, option_selected)
     except Exception as e:
-        logger.info(e)
         return jsonify(message="There was error updating the selected response"), 500
     #Add data to conversation
     try:
@@ -278,16 +259,11 @@ def select_question():
 
 #Get recent conversation messages
 @app.route("/get_messages/<page>", methods=["GET"])
-@jwt_required()
+@flask_login.login_required
 def get_messages_user(page):
-    #Get jwt data
-    email = get_jwt_identity()
-    user = find_user({"email": email})
-    if not user:
-        return jsonify(message="User from session not found on db"), 401
     #Try to pull messages
     try:
-        user_id = user["_id"]
+        user_id = ObjectId(flask_login.current_user.id)
         page = int(page)
         results_per_page = 10
         messages = get_messages(user_id, offset=results_per_page*page, limit_messages=results_per_page)
@@ -295,6 +271,12 @@ def get_messages_user(page):
     except Exception as e:
         logger.info(e)
         return jsonify(message="There was en error getting the messages"), 500
+
+@app.route('/logout', methods=["POST"])
+@flask_login.login_required
+def logout():
+    flask_login.logout_user()
+    return jsonify(message='Logged out'), 200
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Running pipeline with steps')
