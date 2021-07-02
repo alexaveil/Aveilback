@@ -55,7 +55,7 @@ def get_question_by_id(question_id):
     return conversations_collection.find_one({"_id":ObjectId(question_id)})
 
 def get_messages(user_id, offset=0, limit_messages=10, sort_order=-1): #Sort order -1 to set latest first
-    return list(conversations_collection.find({"user_id":user_id},{'_id': False, "user_id":False}).sort([('date', sort_order)]).skip(offset).limit(limit_messages))
+    return list(conversations_collection.find({"user_id":user_id},{"user_id":False}).sort([('date', sort_order)]).skip(offset).limit(limit_messages))
 
 def select_response(question_id, option_selected):
     conversations_collection.update_one({"_id":ObjectId(question_id)}, {"$set": {'option_selected': option_selected}}, upsert=False)

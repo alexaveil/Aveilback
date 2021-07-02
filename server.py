@@ -192,10 +192,11 @@ def ask_question():
     if question_count > MAX_QUESTIONS:
         return jsonify(message="Amount of questions performed exceeded"), 402
     #Ask GPT3 the question
+    interests = user["interests"]
     try: #Ask 4 times
         responses = []
         for i in range(4):
-            response = gpt3_handler.ask_question(question)
+            response = gpt3_handler.ask_interest_question(question, interests)
             responses.append(response)
     except Exception as e:
         return jsonify(message="There was an error generating the question response"), 500
@@ -271,15 +272,20 @@ def select_question():
 @app.route("/get_messages/<page>", methods=["GET"])
 @flask_login.login_required
 def get_messages_user(page):
+    def clean_id(entry):
+        id = entry["_id"]
+        del entry["_id"]
+        entry["question_id"]=str(id)
+        return entry
     #Try to pull messages
     try:
         user_id = ObjectId(flask_login.current_user.id)
         page = int(page)
         results_per_page = 10
         messages = get_messages(user_id, offset=results_per_page*page, limit_messages=results_per_page)
+        messages = list(map(clean_id, messages))
         return jsonify(messages), 200
     except Exception as e:
-        logger.info(e)
         return jsonify(message="There was en error getting the messages"), 500
 
 @app.route('/logout', methods=["POST"])
