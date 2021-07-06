@@ -63,3 +63,8 @@ def select_response(question_id, option_selected):
 #Data responses collection
 def add_response_tagging_data(data_to_insert):
     responses_tagged_data.insert_many(data_to_insert)
+
+def get_data(from_time=None):
+    #{"$gte": from_date, "$lt": to_date}
+    filter = {} if from_time is None else {'date':{"$gte": from_date}}
+    return list(responses_tagged_data.find(filter, {"_id":False, "user_id":False, "question_id":False, "date":False}))
