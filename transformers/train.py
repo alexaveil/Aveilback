@@ -52,7 +52,7 @@ train_dataloader = DataLoader(small_train_dataset, shuffle=True, batch_size=1)
 eval_dataloader = DataLoader(small_eval_dataset, batch_size=1)
 model = T5ForConditionalGeneration.from_pretrained("t5-small")
 optimizer = AdamW(model.parameters(), lr=5e-5)
-num_epochs = 3
+num_epochs = 450
 num_training_steps = num_epochs * len(train_dataloader)
 lr_scheduler = get_scheduler(
     "linear",
@@ -70,7 +70,6 @@ model.train()
 for epoch in range(num_epochs):
     for batch in train_dataloader:
         utter = batch["utterances"][0]
-        pprint(utter["history"][0])
         history = utter["history"][0][0].to(device)
         candidate = utter["candidates"][0][0].to(device)
         #Get input_ids and labels from batch
@@ -89,17 +88,17 @@ model.eval()
 for batch in eval_dataloader:
     utter = batch["utterances"][0]
     history = utter["history"][0][0].to(device)
-    pprint(history)
     candidate = utter["candidates"][0][0].to(device)
-    pprint(candidate)
     with torch.no_grad():
         outputs = model(input_ids=history, labels=candidate)
     logits = outputs.logits
     predictions = torch.argmax(logits, dim=-1)
     print(predictions)
+    print(predictions.shape)
     print(candidate)
-    metric.add_batch(predictions=predictions, references=candidate)
-score = metric.compute()
+    print(candidate.shape)
+    metric.add_batch(predictions=predictions[0], references=candidate[0])
+score = metric.compute(average="micro")
 print(score)
 
 
