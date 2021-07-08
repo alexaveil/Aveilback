@@ -19,14 +19,13 @@ from ignite.handlers import ModelCheckpoint, global_step_from_engine
 from ignite.metrics import Accuracy, Loss, MetricsLambda, RunningAverage
 from ignite.contrib.handlers import ProgressBar, PiecewiseLinear
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger, OutputHandler, OptimizerParamsHandler
-from transformers import (AdamW, OpenAIGPTDoubleHeadsModel, OpenAIGPTTokenizer,
-                                  GPT2DoubleHeadsModel, GPT2Tokenizer, WEIGHTS_NAME, CONFIG_NAME)
+from transformers import (AdamW, T5ForConditionalGeneration, T5Tokenizer, WEIGHTS_NAME, CONFIG_NAME)
 
 SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
 ATTR_TO_SPECIAL_TOKEN = {'bos_token': '<bos>', 'eos_token': '<eos>', 'pad_token': '<pad>',
                          'additional_special_tokens': ['<speaker1>', '<speaker2>']}
-MODEL_INPUTS = ["input_ids", "mc_token_ids", "labels", "mc_labels", "token_type_ids"]
-PADDED_INPUTS = ["input_ids", "labels", "token_type_ids"]
+MODEL_INPUTS = ["input_ids", "labels"]
+PADDED_INPUTS = ["input_ids", "labels"]
 
 #https://github.com/huggingface/transfer-learning-conv-ai
 #https://discuss.huggingface.co/t/fine-tuning-gpt2-on-persona-chat-dataset-outputs-gibberish/3111
@@ -50,7 +49,7 @@ def pad_dataset(dataset, padding=0):
 
 def add_special_tokens_(model, tokenizer):
     """ Add special tokens to the tokenizer and the model if they have not already been added. """
-    orig_num_tokens = len(tokenizer.encoder)
+    orig_num_tokens = tokenizer.vocab_size
     num_added_tokens = tokenizer.add_special_tokens(ATTR_TO_SPECIAL_TOKEN) # doesn't add if they are already there
     if num_added_tokens > 0:
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
@@ -60,13 +59,12 @@ def build_input_from_segments(persona, history, reply, tokenizer, labels=False, 
     bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[:-1])
     sequence = [[bos] + list(chain(*persona))] + history + [reply + ([eos] if with_eos else [])]
     sequence = [sequence[0]] + [[speaker2 if (len(sequence)-i) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
+    input_sequence, labels = sequence[:-1], sequence[-1:] #Separate the conversation last message
+    input_sequence += [[speaker1]] #Add speaker 1 to input_sequence at the end to mark the start
+    labels = [labels[0][1:]] #Remove the speaker 1 from the labels
     instance = {}
-    instance["input_ids"] = list(chain(*sequence))
-    instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
-    instance["mc_token_ids"] = len(instance["input_ids"]) - 1
-    instance["labels"] = [-100] * len(instance["input_ids"])
-    if labels:
-        instance["labels"] = ([-100] * sum(len(s) for s in sequence[:-1])) + [-100] + sequence[-1][1:]
+    instance["input_ids"] = list(chain(*input_sequence))
+    instance["labels"] = list(chain(*labels))
     return instance
 
 def get_data_loaders(args, tokenizer):
@@ -89,18 +87,15 @@ def get_data_loaders(args, tokenizer):
                         instance = build_input_from_segments(persona, history, candidate, tokenizer, labels)
                         for input_name, input_array in instance.items():
                             datasets[dataset_name][input_name].append(input_array)
-                    datasets[dataset_name]["mc_labels"].append(num_candidates - 1)
                     datasets[dataset_name]["n_candidates"] = num_candidates
                 persona = [persona[-1]] + persona[:-1]  # permuted personalities
-
     logger.info("Pad inputs and convert to Tensor")
     tensor_datasets = {"train": [], "valid": []}
     for dataset_name, dataset in datasets.items():
         dataset = pad_dataset(dataset, padding=tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[-1]))
         for input_name in MODEL_INPUTS:
             tensor = torch.tensor(dataset[input_name])
-            if input_name != "mc_labels":
-                tensor = tensor.view((-1, datasets[dataset_name]["n_candidates"]) + tensor.shape[1:])
+            tensor = tensor.view((-1, tensor.shape[1:][0]))
             tensor_datasets[dataset_name].append(tensor)
 
     logger.info("Build train and validation dataloaders")
@@ -150,11 +145,9 @@ def train():
         torch.distributed.init_process_group(backend='nccl', init_method='env://')
 
     logger.info("Prepare tokenizer, pretrained model and optimizer.")
-    tokenizer_class = GPT2Tokenizer if "gpt2" in args.model_checkpoint else OpenAIGPTTokenizer # cant use Autotokenizer because checkpoint could be a Path
+    tokenizer_class = T5Tokenizer
+    model_class = T5ForConditionalGeneration
     tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
-
-
-    model_class = GPT2DoubleHeadsModel if "gpt2" in args.model_checkpoint else OpenAIGPTDoubleHeadsModel
     model = model_class.from_pretrained(args.model_checkpoint)
     model.to(args.device)
     # Add special tokens if they are not already added
@@ -175,12 +168,11 @@ def train():
     def update(engine, batch):
         model.train()
         batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
-        input_ids, mc_token_ids, labels, mc_labels, token_type_ids = batch
-        output = model(input_ids, token_type_ids=token_type_ids, mc_token_ids=mc_token_ids, mc_labels=mc_labels, labels=labels)
+        input_ids, labels = batch
+        output = model(input_ids=input_ids, labels=labels)
         lm_loss=output.loss
-        mc_loss = output.mc_loss
         #print(type(lm_loss))
-        loss = (lm_loss * args.lm_coef + mc_loss * args.mc_coef)/ args.gradient_accumulation_steps
+        loss = (lm_loss * args.lm_coef)/ args.gradient_accumulation_steps
         if args.fp16:
             with amp.scale_loss(loss, optimizer) as scaled_loss:
                 scaled_loss.backward()
@@ -199,15 +191,12 @@ def train():
         model.eval()
         with torch.no_grad():
             batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
-            input_ids, mc_token_ids, labels, mc_labels, token_type_ids = batch
-            logger.info(tokenizer.decode(input_ids[0, -1, :].tolist()))
+            input_ids, labels = batch
+            logger.info(tokenizer.decode(input_ids[-1, :].tolist()))
             # if we dont send labels to model, it doesnt return losses
-            output = model(input_ids, token_type_ids=token_type_ids, mc_token_ids=mc_token_ids)
-            lm_logits = output.logits
-            mc_logits = output.mc_logits
-            lm_logits_flat_shifted = lm_logits[..., :-1, :].contiguous().view(-1, lm_logits.size(-1))
-            labels_flat_shifted = labels[..., 1:].contiguous().view(-1)
-            return (lm_logits_flat_shifted, mc_logits), (labels_flat_shifted, mc_labels)
+            output = model(input_ids=input_ids, labels=labels)
+            logits = output.logits
+            return (logits), (labels)
     evaluator = Engine(inference)
 
     # Attach evaluation to trainer: we evaluate when we start the training and at the end of each epoch
