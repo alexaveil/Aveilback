@@ -203,12 +203,7 @@ def train():
             predictions = torch.argmax(logits, dim=-1)
             logger.info(tokenizer.decode(predictions[-1, :].tolist()))
             transposed_logits = torch.transpose(logits,1,2) #Transpose to have the correct format for nll loss
-            #print(logits.shape)
-            #print(labels.shape)
-            #print(predictions.shape)
-            #print(transposed_logits.shape)
             return transposed_logits, predictions, labels
-            #return (logits.transpose(1,2), predictions), (labels, labels)
     evaluator = Engine(inference)
 
     # Attach evaluation to trainer: we evaluate when we start the training and at the end of each epoch
