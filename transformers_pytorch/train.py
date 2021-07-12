@@ -10,16 +10,18 @@ from itertools import chain
 import sys
 sys.path.append(os.getcwd())
 from transformers_pytorch.dataset_utils import get_dataset, make_logdir
+from utils import save_pickle
 
 import torch
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader, TensorDataset
 from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint, global_step_from_engine
-from ignite.metrics import Accuracy, Loss, MetricsLambda, RunningAverage
+from ignite.metrics import Accuracy, Recall, Loss, MetricsLambda, RunningAverage
 from ignite.contrib.handlers import ProgressBar, PiecewiseLinear
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger, OutputHandler, OptimizerParamsHandler
 from transformers import (AdamW, T5ForConditionalGeneration, T5Tokenizer, WEIGHTS_NAME, CONFIG_NAME)
+from ignite.utils import to_onehot
 
 SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
 ATTR_TO_SPECIAL_TOKEN = {'bos_token': '<bos>', 'eos_token': '<eos>', 'pad_token': '<pad>',
@@ -42,9 +44,9 @@ def average_distributed_scalar(scalar, args):
 
 def pad_dataset(dataset, padding=0):
     """ Pad the dataset. This could be optimized by defining a Dataset class and padding at the batch level, but this is simpler. """
-    max_l = max(len(x) for x in dataset["input_ids"])
     for name in PADDED_INPUTS:
-        dataset[name] = [x + [padding if name != "labels" else -100] * (max_l - len(x)) for x in dataset[name]]
+        max_l = max(len(x) for x in dataset[name])
+        dataset[name] = [x + [padding if name != "labels" else -100] * (max_l - len(x)) for x in dataset[name]] # -100 to not take those tokens into consideration for evaluating metrics
     return dataset
 
 def add_special_tokens_(model, tokenizer):
@@ -74,6 +76,8 @@ def get_data_loaders(args, tokenizer):
     logger.info("Build inputs and labels")
     datasets = {"train": defaultdict(list), "valid": defaultdict(list)}
     for dataset_name, dataset in personachat.items():
+        if dataset_name not in datasets.keys():
+            continue
         num_candidates = len(dataset[0]["utterances"][0]["candidates"])
         if args.num_candidates > 0 and dataset_name == 'train':
             num_candidates = min(args.num_candidates, num_candidates)
@@ -105,10 +109,9 @@ def get_data_loaders(args, tokenizer):
     train_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, shuffle=(not args.distributed))
     valid_loader = DataLoader(valid_dataset, sampler=valid_sampler, batch_size=args.valid_batch_size, shuffle=False)
 
-    logger.info("Train dataset (Batch, Candidates, Seq length): {}".format(train_dataset.tensors[0].shape))
-    logger.info("Valid dataset (Batch, Candidates, Seq length): {}".format(valid_dataset.tensors[0].shape))
+    logger.info("Train dataset (Batch, Seq length): {}".format(train_dataset.tensors[0].shape))
+    logger.info("Valid dataset (Batch, Seq length): {}".format(valid_dataset.tensors[0].shape))
     return train_loader, valid_loader, train_sampler, valid_sampler
-
 
 def train():
     parser = ArgumentParser()
@@ -121,8 +124,8 @@ def train():
     parser.add_argument("--valid_batch_size", type=int, default=4, help="Batch size for validation")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8, help="Accumulate gradients on several steps")
     parser.add_argument("--lr", type=float, default=6.25e-5, help="Learning rate")
-    parser.add_argument("--lm_coef", type=float, default=1.0, help="LM loss coefficient")
-    parser.add_argument("--max_norm", type=float, default=1.0, help="Clipping gradient norm")
+    parser.add_argument("--lm_coef", type=float, default=1, help="LM loss coefficient")
+    parser.add_argument("--max_norm", type=float, default=1, help="Clipping gradient norm")
     parser.add_argument("--n_epochs", type=int, default=3, help="Number of training epochs")
     parser.add_argument("--personality_permutations", type=int, default=1, help="Number of permutations of personality sentences")
     parser.add_argument("--eval_before_start", action='store_true', help="If true start with a first evaluation before training")
@@ -170,7 +173,6 @@ def train():
         input_ids, labels = batch
         output = model(input_ids=input_ids, labels=labels)
         lm_loss=output.loss
-        #print(type(lm_loss))
         loss = (lm_loss * args.lm_coef)/ args.gradient_accumulation_steps
         if args.fp16:
             with amp.scale_loss(loss, optimizer) as scaled_loss:
@@ -192,10 +194,21 @@ def train():
             batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
             input_ids, labels = batch
             logger.info(tokenizer.decode(input_ids[-1, :].tolist()))
+            logger.info(tokenizer.decode(labels[-1, :].tolist()))
+            logger.info("")
             # if we dont send labels to model, it doesnt return losses
             output = model(input_ids=input_ids, labels=labels)
             logits = output.logits
-            return (logits), (labels)
+            batch_size, max_word_size, dictionary_size = logits.shape
+            predictions = torch.argmax(logits, dim=-1)
+            logger.info(tokenizer.decode(predictions[-1, :].tolist()))
+            transposed_logits = torch.transpose(logits,1,2) #Transpose to have the correct format for nll loss
+            #print(logits.shape)
+            #print(labels.shape)
+            #print(predictions.shape)
+            #print(transposed_logits.shape)
+            return transposed_logits, predictions, labels
+            #return (logits.transpose(1,2), predictions), (labels, labels)
     evaluator = Engine(inference)
 
     # Attach evaluation to trainer: we evaluate when we start the training and at the end of each epoch
@@ -216,8 +229,8 @@ def train():
 
     # Prepare metrics - note how we compute distributed metrics
     RunningAverage(output_transform=lambda x: x).attach(trainer, "loss")
-    metrics = {"nll": Loss(torch.nn.CrossEntropyLoss(ignore_index=-100), output_transform=lambda x: (x[0][0], x[1][0])),
-               "accuracy": Accuracy(output_transform=lambda x: (x[0][1], x[1][1]))}
+    metrics = {"nll": Loss(torch.nn.CrossEntropyLoss(ignore_index=-100), output_transform=lambda x: (x[0], x[2])),
+               "accuracy": Accuracy(output_transform=lambda x: (x[0], x[2]))}
     metrics.update({"average_nll": MetricsLambda(average_distributed_scalar, metrics["nll"], args),
                     "average_accuracy": MetricsLambda(average_distributed_scalar, metrics["accuracy"], args)})
     metrics["average_ppl"] = MetricsLambda(math.exp, metrics["average_nll"])
