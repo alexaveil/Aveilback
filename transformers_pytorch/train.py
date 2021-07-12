@@ -11,6 +11,7 @@ import sys
 sys.path.append(os.getcwd())
 from transformers_pytorch.dataset_utils import get_dataset, make_logdir
 from utils import save_pickle
+from transformers_pytorch.tokenizer_utils import add_special_tokens_
 
 import torch
 from torch.nn.parallel import DistributedDataParallel
@@ -24,8 +25,6 @@ from transformers import (AdamW, T5ForConditionalGeneration, T5Tokenizer, WEIGHT
 from ignite.utils import to_onehot
 
 SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
-ATTR_TO_SPECIAL_TOKEN = {'bos_token': '<bos>', 'eos_token': '<eos>', 'pad_token': '<pad>',
-                         'additional_special_tokens': ['<speaker1>', '<speaker2>']}
 MODEL_INPUTS = ["input_ids", "labels"]
 PADDED_INPUTS = ["input_ids", "labels"]
 
@@ -48,13 +47,6 @@ def pad_dataset(dataset, padding=0):
         max_l = max(len(x) for x in dataset[name])
         dataset[name] = [x + [padding if name != "labels" else -100] * (max_l - len(x)) for x in dataset[name]] # -100 to not take those tokens into consideration for evaluating metrics
     return dataset
-
-def add_special_tokens_(model, tokenizer):
-    """ Add special tokens to the tokenizer and the model if they have not already been added. """
-    orig_num_tokens = tokenizer.vocab_size
-    num_added_tokens = tokenizer.add_special_tokens(ATTR_TO_SPECIAL_TOKEN) # doesn't add if they are already there
-    if num_added_tokens > 0:
-        model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
 
 def build_input_from_segments(persona, history, reply, tokenizer, labels=False, with_eos=True):
     """ Build a sequence of input from 3 segments: persona, history and last reply. """

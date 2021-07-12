@@ -1,9 +1,12 @@
 import argparse
 import torch
+import os
+import sys
+sys.path.append(os.getcwd())
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 import time
 from pytorch_memlab import MemReporter
-from train import add_special_tokens_
+from transformers_pytorch.tokenizer_utils import add_special_tokens_
 
 class T5Model:
     def __init__(self, model_path='t5-base'):
@@ -25,6 +28,13 @@ class T5Model:
                                 temperature=temperature)
         tokenized_output = self.tokenizer.batch_decode(outputs, return_tensors="pt", skip_special_tokens=True)
         return tokenized_output
+
+    def ask_question(self, interest_list, question):
+        prompt = ""
+        for interest in interest_list:
+            prompt+= "user likes "+interest.lower()+". "
+        prompt+="<speaker2> "+question+ " <speaker1>"
+        return self.inference(prompt)
 
 def test_t5model(checkpoint_path):
     model = T5Model(model_path=checkpoint_path)
