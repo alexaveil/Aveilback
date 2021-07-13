@@ -5,7 +5,6 @@ import sys
 sys.path.append(os.getcwd())
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 import time
-from pytorch_memlab import MemReporter
 from transformers_pytorch.tokenizer_utils import add_special_tokens_
 
 class T5Model:
