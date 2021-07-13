@@ -3,7 +3,7 @@ from flask import Flask, jsonify, request
 from inference import T5Model
 
 app = Flask(__name__)
-model = T5Model()
+model = T5Model(model_path = "model")
 
 @app.route('/answer', methods=["POST"])
 def classify_review():
