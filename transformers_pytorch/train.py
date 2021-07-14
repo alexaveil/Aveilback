@@ -117,7 +117,7 @@ def train():
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Accumulate gradients on several steps")
     parser.add_argument("--lr", type=float, default=6.25e-5, help="Learning rate")
     parser.add_argument("--lm_coef", type=float, default=1, help="LM loss coefficient")
-    parser.add_argument("--max_norm", type=float, default=1, help="Clipping gradient norm")
+    parser.add_argument("--max_norm", type=float, default=3, help="Clipping gradient norm")
     parser.add_argument("--n_epochs", type=int, default=3, help="Number of training epochs")
     parser.add_argument("--personality_permutations", type=int, default=1, help="Number of permutations of personality sentences")
     parser.add_argument("--eval_before_start", action='store_true', help="If true start with a first evaluation before training")
@@ -185,17 +185,20 @@ def train():
         with torch.no_grad():
             batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
             input_ids, labels = batch
-            logger.info(tokenizer.decode(input_ids[-1, :].tolist()))
-            logger.info(tokenizer.decode(labels[-1, :].tolist()))
-            logger.info("")
             # if we dont send labels to model, it doesnt return losses
             output = model(input_ids=input_ids, labels=labels)
             logits = output.logits
+            """
+            #Get predictions for batch and show results to compare
             batch_size, max_word_size, dictionary_size = logits.shape
             predictions = torch.argmax(logits, dim=-1)
-            logger.info(tokenizer.decode(predictions[-1, :].tolist()))
+            logger.info("Input: "+tokenizer.decode(input_ids[-1, :].tolist()))
+            logger.info("Labels: "+tokenizer.decode([0 if x==-100 else x for x in labels[-1, :].tolist()])) #-100 gives error when decoding for labels
+            logger.info("Output generated: "+tokenizer.decode(predictions[-1, :].tolist()))
+            logger.info("")
+            """
             transposed_logits = torch.transpose(logits,1,2) #Transpose to have the correct format for nll loss
-            return transposed_logits, predictions, labels
+            return transposed_logits, labels
     evaluator = Engine(inference)
 
     # Attach evaluation to trainer: we evaluate when we start the training and at the end of each epoch
@@ -216,8 +219,8 @@ def train():
 
     # Prepare metrics - note how we compute distributed metrics
     RunningAverage(output_transform=lambda x: x).attach(trainer, "loss")
-    metrics = {"nll": Loss(torch.nn.CrossEntropyLoss(ignore_index=-100), output_transform=lambda x: (x[0], x[2])),
-               "accuracy": Accuracy(output_transform=lambda x: (x[0], x[2]))}
+    metrics = {"nll": Loss(torch.nn.CrossEntropyLoss(ignore_index=-100), output_transform=lambda x: (x[0], x[1])),
+               "accuracy": Accuracy(output_transform=lambda x: (x[0], x[1]))}
     metrics.update({"average_nll": MetricsLambda(average_distributed_scalar, metrics["nll"], args),
                     "average_accuracy": MetricsLambda(average_distributed_scalar, metrics["accuracy"], args)})
     metrics["average_ppl"] = MetricsLambda(math.exp, metrics["average_nll"])
