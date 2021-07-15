@@ -36,4 +36,4 @@ def classify_review():
 if __name__ == '__main__':
     # This is used when running locally only. When deploying to Google Cloud
     # Run, a webserver process such as Gunicorn will serve the app.
-    app.run(debug=False, host="localhost", port=int(os.environ.get("PORT", 5000)))
+    app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
