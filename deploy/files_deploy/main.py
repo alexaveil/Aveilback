@@ -3,7 +3,7 @@ from flask import Flask, jsonify, request
 from inference import T5Model
 
 app = Flask(__name__)
-model = T5Model(model_path = "model")
+model = T5Model()
 
 @app.route('/answer', methods=["POST"])
 def classify_review():
@@ -27,16 +27,13 @@ def classify_review():
         return jsonify(code=403, message="Bad request")
     #Ask the model
     try:
-        print(interests)
-        print(question)
         answer = model.ask_question(interests, question)
         response = jsonify(message=answer)
         return response, 200
     except Exception as e:
-        print(e)
         return jsonify(code=403, message="There was an error processing the request, please check your parameters")
 
 if __name__ == '__main__':
     # This is used when running locally only. When deploying to Google Cloud
     # Run, a webserver process such as Gunicorn will serve the app.
-    app.run(debug=False, host="localhost", port=int(os.environ.get("PORT", 8080)))
+    app.run(debug=False, host="localhost", port=int(os.environ.get("PORT", 5000)))

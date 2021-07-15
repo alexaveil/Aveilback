@@ -1,11 +1,8 @@
 import argparse
 import torch
-import os
-import sys
-sys.path.append(os.getcwd())
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 import time
-from transformers_pytorch.tokenizer_utils import add_special_tokens_
+from tokenizer_utils import add_special_tokens_
 
 class T5Model:
     def __init__(self, model_path='t5-base'):
@@ -33,18 +30,18 @@ class T5Model:
         for interest in interest_list:
             prompt+= "user likes "+interest.lower()+". "
         prompt+="<speaker2> "+question+ " <speaker1>"
+        print(prompt)
+        print()
         return self.inference(prompt)
 
 def test_t5model(checkpoint_path):
     model = T5Model(model_path=checkpoint_path)
     interests = "i like computers. i like reading books. i like talking to chatbots. i love listening to classical music. "
-    interests = "i like to remodel homes . i like to go hunting . i like to shoot a bow . my favorite holiday is halloween . "
     while(True):
         entry = input("What should I ask T5?\n")
-        prompt = interests+"<speaker2> "+entry+" <speaker1>"
-        print("Input prompt:" +prompt+"\n")
+        prompt = "<speaker2>"+entry+"<speaker1>"
         output = model.inference(prompt)
-        print("Output:"+str(output)+"\n")
+        print(output)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Running pipeline with steps')
