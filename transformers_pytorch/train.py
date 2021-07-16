@@ -21,7 +21,8 @@ from ignite.handlers import ModelCheckpoint, global_step_from_engine
 from ignite.metrics import Accuracy, Recall, Loss, MetricsLambda, RunningAverage
 from ignite.contrib.handlers import ProgressBar, PiecewiseLinear
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger, OutputHandler, OptimizerParamsHandler
-from transformers import (AdamW, T5ForConditionalGeneration, T5Tokenizer, WEIGHTS_NAME, CONFIG_NAME)
+from transformers import (T5ForConditionalGeneration, T5Tokenizer, WEIGHTS_NAME, CONFIG_NAME)
+from transformers.optimization import AdamW, Adafactor
 from ignite.utils import to_onehot
 
 SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
@@ -115,7 +116,7 @@ def train():
     parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training")
     parser.add_argument("--valid_batch_size", type=int, default=2, help="Batch size for validation")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Accumulate gradients on several steps")
-    parser.add_argument("--lr", type=float, default=6.25e-5, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--lm_coef", type=float, default=1, help="LM loss coefficient")
     parser.add_argument("--max_norm", type=float, default=3, help="Clipping gradient norm")
     parser.add_argument("--n_epochs", type=int, default=3, help="Number of training epochs")
@@ -146,7 +147,8 @@ def train():
     model.to(args.device)
     # Add special tokens if they are not already added
     add_special_tokens_(model, tokenizer)
-    optimizer = AdamW(model.parameters(), lr=args.lr, correct_bias=True)
+    # Finetuning tips for T5: https://discuss.huggingface.co/t/t5-finetuning-tips/684/2
+    optimizer = Adafactor(model.parameters(), scale_parameter=False, relative_step=False, warmup_init=False, lr=args.lr)
 
     # Prepare model for FP16 and distributed training if needed (order is important, distributed should be the last)
     if args.fp16:
@@ -188,6 +190,7 @@ def train():
             # if we dont send labels to model, it doesnt return losses
             output = model(input_ids=input_ids, labels=labels)
             logits = output.logits
+
             """
             #Get predictions for batch and show results to compare
             batch_size, max_word_size, dictionary_size = logits.shape
@@ -197,6 +200,7 @@ def train():
             logger.info("Output generated: "+tokenizer.decode(predictions[-1, :].tolist()))
             logger.info("")
             """
+
             transposed_logits = torch.transpose(logits,1,2) #Transpose to have the correct format for nll loss
             return transposed_logits, labels
     evaluator = Engine(inference)
@@ -214,8 +218,8 @@ def train():
         evaluator.add_event_handler(Events.EPOCH_STARTED, lambda engine: valid_sampler.set_epoch(engine.state.epoch))
 
     # Linearly decrease the learning rate from lr to zero
-    scheduler = PiecewiseLinear(optimizer, "lr", [(0, args.lr), (args.n_epochs * len(train_loader), 0.0)])
-    trainer.add_event_handler(Events.ITERATION_STARTED, scheduler)
+    #scheduler = PiecewiseLinear(optimizer, "lr", [(0, args.lr), (args.n_epochs * len(train_loader), 0.0)])
+    #trainer.add_event_handler(Events.ITERATION_STARTED, scheduler)
 
     # Prepare metrics - note how we compute distributed metrics
     RunningAverage(output_transform=lambda x: x).attach(trainer, "loss")
