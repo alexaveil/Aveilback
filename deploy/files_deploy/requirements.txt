@@ -1,5 +1,6 @@
 Flask==1.1.2
-torch==1.7.1
+-f https://download.pytorch.org/whl/torch_stable.html
+torch==1.7.1+cpu
 flask-sslify==0.1.5
 tokenizers==0.10.3
 transformers==4.8.2
