@@ -1,5 +1,5 @@
 import argparse
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from gevent.pywsgi import WSGIServer
 import gevent
 import os
@@ -64,7 +64,7 @@ def load_user(user_id):
     else:
         return User(user_id)
 
-@app.route("/register", methods=["POST"])
+@app.route("/user/register", methods=["POST"])
 @limiter.limit("10/minute", override_defaults=False)
 def register():
     #Avoid missing fields
@@ -79,7 +79,7 @@ def register():
     birth_date = request.form["birth_date"]
     #Validate date
     if not valid_date(birth_date):
-        return jsonify(message="Date is not valid, try with format dd/mm/yyyy"), 400
+            return jsonify(message="Date is not valid, try with format dd/mm/yyyy"), 400
     #Validate email
     if not valid_email(email):
         return jsonify(message="Email is not valid"), 400
@@ -106,7 +106,7 @@ def register():
     response = jsonify(message="User added sucessfully")
     return response, 200
 
-@app.route("/login", methods=["POST"])
+@app.route("/user/login", methods=["POST"])
 def login():
     #Avoid missing fields
     for field in ["email","password"]:
@@ -132,7 +132,7 @@ def login():
 
 # Protect a route with jwt_required, which will kick out requests
 # without a valid JWT present.
-@app.route("/add_interests", methods=["POST"])
+@app.route("/user/add_interests", methods=["POST"])
 @flask_login.login_required
 def update_user_interests():
     #Check if interests provided
@@ -157,7 +157,7 @@ def update_user_interests():
         return jsonify(message="There was an error updating the interests to the database"), 500
 
 #Get user information
-@app.route("/user_info", methods=["GET"])
+@app.route("/user/user_info", methods=["GET"])
 @flask_login.login_required
 def get_user_info():
     user = find_user({"_id": ObjectId(flask_login.current_user.id)}, filter=["_id","password"])
@@ -168,7 +168,7 @@ def get_user_info():
         return jsonify(user), 200
 
 #Ask GPT3 a question
-@app.route("/ask_question", methods=["POST"])
+@app.route("/messages/ask_question", methods=["POST"])
 @flask_login.login_required
 def ask_question():
     #Get question from request
@@ -218,7 +218,7 @@ def ask_question():
     return jsonify(data), 200
 
 #Ask GPT3 a question
-@app.route("/select_question", methods=["POST"])
+@app.route("/messages/select_question", methods=["POST"])
 @flask_login.login_required
 def select_question():
     #Get question_id and option_selected
@@ -269,7 +269,7 @@ def select_question():
     return jsonify(message="Response updated"), 200
 
 #Get recent conversation messages
-@app.route("/get_messages/<page>", methods=["GET"])
+@app.route("/messages/get_messages/<page>", methods=["GET"])
 @flask_login.login_required
 def get_messages_user(page):
     def clean_id(entry):
@@ -288,11 +288,19 @@ def get_messages_user(page):
     except Exception as e:
         return jsonify(message="There was en error getting the messages"), 500
 
-@app.route('/logout', methods=["POST"])
+@app.route('/user/logout', methods=["POST"])
 @flask_login.login_required
 def logout():
     flask_login.logout_user()
     return jsonify(message='Logged out'), 200
+
+@app.route('/api/docs', methods=["GET"])
+def get_docs():
+    try:
+        return render_template('swaggerui.html')
+    except Exception as e:
+        logger.info(str(e))
+        return jsonify(message="There was en error getting swagger"), 404
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Running pipeline with steps')
