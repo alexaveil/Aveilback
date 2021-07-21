@@ -1,0 +1,115 @@
+swagger: "2.0"
+info:
+  description: "Server endpoints to interact with the chatbot and users in DB."
+  version: "1.0.0"
+  title: "GPT3 Chatbot"
+host: "35.184.202.109:8000"
+tags:
+- name: "user"
+  description: "Operations about user"
+schemes:
+- "https"
+paths:
+  /register:
+    post:
+      tags:
+      - "user"
+      summary: "Register user"
+      description: "Register a user based on input data"
+      produces:
+      - "application/json"
+      consumes:
+        - "multipart/form-data"
+      parameters:
+      - name: "first_name"
+        in: "formData"
+        description: "First name of the user"
+        required: true
+        type: "string"
+      - name: "last_name"
+        in: "formData"
+        description: "Last name of the user"
+        required: true
+        type: "string"
+      - name: "password"
+        in: "formData"
+        description: "Password of the user"
+        required: true
+        type: "string"
+      - name: "birth_date"
+        in: "formData"
+        description: "Birth date of the user in format dd/mm/yyyy"
+        required: true
+        type: "string"
+      - name: "email"
+        in: "formData"
+        description: "Email of the user"
+        required: true
+        type: "string"
+      responses:
+        default:
+          description: "User added sucessfully"
+  /user/login:
+    get:
+      tags:
+      - "user"
+      summary: "Logs user into the system"
+      description: ""
+      operationId: "loginUser"
+      produces:
+      - "application/xml"
+      - "application/json"
+      parameters:
+      - name: "username"
+        in: "query"
+        description: "The user name for login"
+        required: true
+        type: "string"
+      - name: "password"
+        in: "query"
+        description: "The password for login in clear text"
+        required: true
+        type: "string"
+      responses:
+        "200":
+          description: "successful operation"
+          schema:
+            type: "string"
+          headers:
+            X-Rate-Limit:
+              type: "integer"
+              format: "int32"
+              description: "calls per hour allowed by the user"
+            X-Expires-After:
+              type: "string"
+              format: "date-time"
+              description: "date in UTC when token expires"
+        "400":
+          description: "Invalid username/password supplied"
+securityDefinitions:
+  cookie:
+    type: "apiKey"
+    name: "Cookie"
+    in: "header"
+definitions:
+  User:
+    type: "object"
+    properties:
+      _id:
+        type: "string"
+      first_name:
+        type: "string"
+      last_name:
+        type: "string"
+      email:
+        type: "string"
+      password:
+        type: "string"
+      birth_date:
+        type: "string"
+      question_count:
+        type: "integer"
+      interests:
+        type: "array"
+        items:
+          type: "string"
