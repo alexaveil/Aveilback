@@ -90,10 +90,10 @@ def register():
         if exists:
             return jsonify(message="User Already Exist"), 409
     except Exception as e:
+        logger.info(str(e))
         return jsonify(message="Couldn't access DB"), 500
     #Create user
     hashed_pass = bcrypt.hashpw(password.encode('utf8'), bcrypt.gensalt())
-    logger.info(hashed_pass)
     user_info = dict(first_name=first_name, last_name=last_name, email=email, password=hashed_pass, birth_date=birth_date, question_count=0)
     try:
         user_entry = register_user(user_info)
@@ -120,6 +120,8 @@ def login():
     #Try to access db
     try:
         user = find_user({"email": email})
+        if not user:
+            return jsonify(message="There was an error in the credentials (email and password don't match)"), 400
     except Exception as e:
         return jsonify(message="Couldn't access DB"), 500
     #Check password
