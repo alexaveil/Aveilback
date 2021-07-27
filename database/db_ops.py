@@ -14,14 +14,9 @@ uri = database_obj["uri"]
 database = database_obj["database"]
 
 path_certificates=config["certificates"]["path"]
-client = MongoClient(
-    uri,
-    ssl=True,
-    ssl_certfile=os.path.join(path_certificates,'client.pem'),
-    ssl_cert_reqs=ssl.CERT_REQUIRED,
-    ssl_ca_certs=os.path.join(path_certificates,'ca.pem'))
-db = client[database]
+client = MongoClient(uri, ssl=True, ssl_cert_reqs='CERT_NONE')
 
+db = client[database]
 #Define dbs
 users_collection = db[database_obj["users"]]
 conversations_collection = db[database_obj["conversations"]]

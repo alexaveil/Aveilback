@@ -21,6 +21,7 @@ import flask_login
 from database.user_model import User
 from config_parser import get_config_dict
 from flask_sslify import SSLify
+from flask_cors import CORS
 
 #Init config to get certificates path
 config_data = get_config_dict()
@@ -38,6 +39,9 @@ logger.setLevel(logging.DEBUG)
 #Create server
 app = Flask(__name__)
 app.config['SECRET_KEY'] = "wzdSFHpyIhRCZOkWPTsiYT94EfXcW3KjYU898JmvDkU1i87Ipf4RrDaFMU1J"
+
+#Allow CORS from frontend
+cors = CORS(app, resources={r"/*": {"origins": "*"}})
 
 #Initialize login
 login_manager = LoginManager()
@@ -79,7 +83,7 @@ def register():
     birth_date = request.form["birth_date"]
     #Validate date
     if not valid_date(birth_date):
-            return jsonify(message="Date is not valid, try with format dd/mm/yyyy"), 400
+        return jsonify(message="Date is not valid, try with format dd/mm/yyyy"), 400
     #Validate email
     if not valid_email(email):
         return jsonify(message="Email is not valid"), 400
@@ -93,7 +97,6 @@ def register():
         return jsonify(message="Couldn't access DB"), 500
     #Create user
     hashed_pass = bcrypt.hashpw(password.encode('utf8'), bcrypt.gensalt())
-    logger.info(hashed_pass)
     user_info = dict(first_name=first_name, last_name=last_name, email=email, password=hashed_pass, birth_date=birth_date, question_count=0)
     try:
         user_entry = register_user(user_info)
@@ -120,6 +123,8 @@ def login():
     #Try to access db
     try:
         user = find_user({"email": email})
+        if not user:
+            return jsonify(message="There was an error in the credentials (email and password don't match)"), 400
     except Exception as e:
         return jsonify(message="Couldn't access DB"), 500
     #Check password
@@ -316,6 +321,6 @@ if __name__ == "__main__":
     if debug:
         app.debug = True
 	# run app
-    http_server = WSGIServer((ip, port), app, keyfile=os.path.join(certificates_folder, 'server.key'), certfile=os.path.join(certificates_folder, 'server.crt'))
+    http_server = WSGIServer((ip, port), app, keyfile=os.path.join(certificates_folder, 'privkey.pem'), certfile=os.path.join(certificates_folder, 'fullchain.pem'))
     logger.info("Server started, running on {}:{}".format(ip, port))
     http_server.serve_forever()
