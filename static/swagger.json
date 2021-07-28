@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "title": "GPT3 Chatbot"
   },
-  "host": "35.208.61.157:8000",
+  "host": "chatbotserver.info:8000",
   "tags": [
     {
       "name": "user",

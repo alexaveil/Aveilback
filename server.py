@@ -6,7 +6,6 @@ import os
 import time
 import logging
 from database.db_ops import find_user, register_user, update_interests, update_queston_count, add_question_with_answers, get_question_by_id, select_response, add_response_tagging_data, get_messages
-import bcrypt
 from datetime import timedelta
 from datetime import timezone
 from flask_limiter import Limiter
@@ -16,11 +15,11 @@ from datetime import datetime
 import ast
 from gpt3 import GPT3Handler
 from bson.objectid import ObjectId
-from flask_login import LoginManager, login_user
-import flask_login
 from database.user_model import User
 from config_parser import get_config_dict
 from flask_sslify import SSLify
+import bcrypt
+from flask_jwt_extended import (JWTManager, jwt_required, create_access_token, get_jwt_identity)
 from flask_cors import CORS
 
 #Init config to get certificates path
@@ -39,17 +38,18 @@ logger.setLevel(logging.DEBUG)
 #Create server
 app = Flask(__name__)
 app.config['SECRET_KEY'] = "wzdSFHpyIhRCZOkWPTsiYT94EfXcW3KjYU898JmvDkU1i87Ipf4RrDaFMU1J"
+app.config['JWT_SECRET_KEY'] = '8ej}s#;K(wPnavmkK`MHjT;3dw28ej}6s#;K(wPnavmkK`MHjT;3dw'
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=24)
+app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(days=30)
 
-#Allow CORS from frontend
-cors = CORS(app, resources={r"/*": {"origins": "*"}})
-
-#Initialize login
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.session_protection = "strong"
+#Initialize jwt manager
+jwt = JWTManager(app)
 
 #Protect to not use http
 sslify = SSLify(app)
+
+#Add cors
+cors = CORS(app, resources={r"/*": {"origins": "*"}})
 
 #Additional elements
 gpt3_handler = GPT3Handler()
@@ -58,15 +58,6 @@ limiter = Limiter(app, key_func=get_remote_address, default_limits=["30 per minu
 limiter.request_filter(lambda: request.method.upper() == 'OPTIONS')
 #Init variable for questions
 MAX_QUESTIONS = 500
-
-#Callback used for loading users
-@login_manager.user_loader
-def load_user(user_id):
-    user_data = find_user({"_id": ObjectId(user_id)})
-    if not user_data:
-        return
-    else:
-        return User(user_id)
 
 @app.route("/user/register", methods=["POST"])
 @limiter.limit("10/minute", override_defaults=False)
@@ -106,8 +97,7 @@ def register():
         return jsonify(message="There was an error registering the user"), 500
     #Login user
     user_id = user_entry.inserted_id
-    response = jsonify(message="User added sucessfully")
-    return response, 200
+    return {"message":"User added sucessfully", "access_token": create_access_token(identity={"id": str(user_id)})}, 200
 
 @app.route("/user/login", methods=["POST"])
 def login():
@@ -130,15 +120,14 @@ def login():
     #Check password
     user_pass = user["password"]
     if bcrypt.checkpw(password.encode('utf8'), user_pass):
-        login_user(User(str(user["_id"])))
-        return jsonify(message="Logged in successfully"), 200
+        return {"message":"Logged in successfully", "access_token": create_access_token(identity={"id": str(user["_id"])})}, 200
     else:
         return jsonify(message="Bad Email or Password"), 401
 
 # Protect a route with jwt_required, which will kick out requests
 # without a valid JWT present.
 @app.route("/user/add_interests", methods=["POST"])
-@flask_login.login_required
+@jwt_required()
 def update_user_interests():
     #Check if interests provided
     if "interests" not in request.form:
@@ -155,7 +144,8 @@ def update_user_interests():
         return jsonify(message="Interests not valid, please check that the amount of interest is correct and that they are valid options"), 400
     #Update interests to db
     try:
-        update_interests(ObjectId(flask_login.current_user.get_id()), interests)
+        user_id = get_jwt_identity()["id"]
+        update_interests(ObjectId(user_id), interests)
         return jsonify(message="User interests updated"), 200
     except Exception as e:
         logger.info(e)
@@ -163,9 +153,9 @@ def update_user_interests():
 
 #Get user information
 @app.route("/user/user_info", methods=["GET"])
-@flask_login.login_required
+@jwt_required()
 def get_user_info():
-    user = find_user({"_id": ObjectId(flask_login.current_user.id)}, filter=["_id","password"])
+    user = find_user({"_id": ObjectId(get_jwt_identity()["id"])}, filter=["_id","password"])
     if not user:
         return jsonify(message="User from session not found on db"), 401
     else:
@@ -174,7 +164,7 @@ def get_user_info():
 
 #Ask GPT3 a question
 @app.route("/messages/ask_question", methods=["POST"])
-@flask_login.login_required
+@jwt_required()
 def ask_question():
     #Get question from request
     if not "question" in request.form:
@@ -184,7 +174,7 @@ def ask_question():
     if not isinstance(question, str):
         return jsonify(message="Question is not a string"), 400
     #Check that user has interests
-    user_id = ObjectId(flask_login.current_user.id)
+    user_id = ObjectId(get_jwt_identity()["id"])
     user = find_user(user_id)
     if "interests" not in user:
         return jsonify(message="User doesn't have interests added"), 400
@@ -224,7 +214,7 @@ def ask_question():
 
 #Ask GPT3 a question
 @app.route("/messages/select_question", methods=["POST"])
-@flask_login.login_required
+@jwt_required()
 def select_question():
     #Get question_id and option_selected
     for param in ["question_id", "option_selected"]:
@@ -238,7 +228,7 @@ def select_question():
         return jsonify(message="Option selected is not valid, must be an integer between 1 and 4"), 400
     option_selected = int(option_selected)
     #Verify that the question corresponds to the user of the session, and that the question exists
-    user_id = ObjectId(flask_login.current_user.id)
+    user_id = ObjectId(get_jwt_identity()["id"])
     user = find_user({"_id":user_id})
     question = get_question_by_id(question_id)
     #Handle conversation not found
@@ -275,7 +265,7 @@ def select_question():
 
 #Get recent conversation messages
 @app.route("/messages/get_messages/<page>", methods=["GET"])
-@flask_login.login_required
+@jwt_required()
 def get_messages_user(page):
     def clean_id(entry):
         id = entry["_id"]
@@ -284,7 +274,7 @@ def get_messages_user(page):
         return entry
     #Try to pull messages
     try:
-        user_id = ObjectId(flask_login.current_user.id)
+        user_id = ObjectId(get_jwt_identity()["id"])
         page = int(page)
         results_per_page = 10
         messages = get_messages(user_id, offset=results_per_page*page, limit_messages=results_per_page)
@@ -293,12 +283,7 @@ def get_messages_user(page):
     except Exception as e:
         return jsonify(message="There was en error getting the messages"), 500
 
-@app.route('/user/logout', methods=["POST"])
-@flask_login.login_required
-def logout():
-    flask_login.logout_user()
-    return jsonify(message='Logged out'), 200
-
+"""
 @app.route('/api/docs', methods=["GET"])
 def get_docs():
     try:
@@ -306,6 +291,7 @@ def get_docs():
     except Exception as e:
         logger.info(str(e))
         return jsonify(message="There was en error getting swagger"), 404
+"""
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Running pipeline with steps')
