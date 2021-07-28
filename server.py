@@ -168,7 +168,7 @@ def get_user_info():
         return jsonify(user), 200
 
 #Get question suggestions
-@app.route("/messages/question_suggestions", methods=["GET"])
+@app.route("/messages/question_suggestion", methods=["GET"])
 @jwt_required()
 def question_suggestions():
     return jsonify(random.sample(question_list, 4)), 200
