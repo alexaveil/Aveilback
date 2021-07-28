@@ -85,6 +85,7 @@ def register():
         if exists:
             return jsonify(message="User Already Exist"), 409
     except Exception as e:
+        logger.info(str(e))
         return jsonify(message="Couldn't access DB"), 500
     #Create user
     hashed_pass = bcrypt.hashpw(password.encode('utf8'), bcrypt.gensalt())
