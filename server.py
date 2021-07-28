@@ -15,12 +15,13 @@ from datetime import datetime
 import ast
 from gpt3 import GPT3Handler
 from bson.objectid import ObjectId
-from database.user_model import User
+from questions.questions_list import question_list
 from config_parser import get_config_dict
 from flask_sslify import SSLify
 import bcrypt
 from flask_jwt_extended import (JWTManager, jwt_required, create_access_token, get_jwt_identity)
 from flask_cors import CORS
+import random
 
 #Init config to get certificates path
 config_data = get_config_dict()
@@ -165,6 +166,12 @@ def get_user_info():
     else:
         #Delete unwanted fields
         return jsonify(user), 200
+
+#Get question suggestions
+@app.route("/messages/question_suggestions", methods=["GET"])
+@jwt_required()
+def question_suggestions():
+    return jsonify(random.sample(question_list, 4)), 200
 
 #Ask GPT3 a question
 @app.route("/messages/ask_question", methods=["POST"])

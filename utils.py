@@ -22,7 +22,7 @@ def now2string(flatten=False):
     now = datetime.now()
     # dd/mm/YY H:M:S
     return now.strftime("%d/%m/%Y %H:%M:%S" if not flatten else "%d_%m_%Y__%H_%M_%S")
-    
+
 def save_pickle(data, path):
     with open(path, 'wb') as handle:
         pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -31,3 +31,12 @@ def load_pickle(path):
     with open(path, 'rb') as handle:
         data = pickle.load(handle)
     return data
+
+def read_txt(path):
+    with open(path) as f:
+        lines = f.read().splitlines()
+    return lines
+
+def write_txt(lines, path):
+    with open(path, 'w') as f:
+        f.writelines(lines)

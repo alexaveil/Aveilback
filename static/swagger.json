@@ -179,6 +179,31 @@
         ]
       }
     },
+    "/messages/question_suggestion": {
+      "get": {
+        "tags": [
+          "message"
+        ],
+        "summary": "Get list of 4 random questions",
+        "description": "Get list of 4 random questions",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "schema": {
+              "$ref": "#/definitions/ArrayOfString"
+            }
+          }
+        },
+        "security": [
+          {
+            "access_token": []
+          }
+        ]
+      }
+    },
     "/messages/ask_question": {
       "post": {
         "tags": [
@@ -429,6 +454,17 @@
       "items": {
         "$ref": "#/definitions/Message"
       }
+    },
+    "ArrayOfString": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "example": [
+        "sometext1",
+        "sometext2",
+        "sometext3"
+      ]
     }
   }
 }

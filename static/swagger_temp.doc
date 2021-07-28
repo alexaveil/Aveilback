@@ -1,0 +1,302 @@
+swagger: "2.0"
+info:
+  description: "Server endpoints to interact with the chatbot and users in DB. To add authentication, make sure you add 'Bearer TOKEN' as the apiKey."
+  version: "1.0.0"
+  title: "GPT3 Chatbot"
+host: "chatbotserver.info:8000"
+tags:
+- name: "user"
+  description: "Operations about user"
+- name: "message"
+  description: "Operations about messages"
+- name: "api"
+  description: "Operations about the api"
+schemes:
+- "https"
+paths:
+  /user/register:
+    post:
+      tags:
+      - "user"
+      summary: "Register user"
+      description: "Register a user based on input data"
+      produces:
+      - "application/json"
+      consumes:
+        - "multipart/form-data"
+      parameters:
+      - name: "first_name"
+        in: "formData"
+        description: "First name of the user"
+        required: true
+        type: "string"
+      - name: "last_name"
+        in: "formData"
+        description: "Last name of the user"
+        required: true
+        type: "string"
+      - name: "password"
+        in: "formData"
+        description: "Password of the user"
+        required: true
+        type: "string"
+      - name: "birth_date"
+        in: "formData"
+        description: "Birth date of the user in format dd/mm/yyyy"
+        required: true
+        type: "string"
+      - name: "email"
+        in: "formData"
+        description: "Email of the user"
+        required: true
+        type: "string"
+      responses:
+        "200":
+          description: "User added sucessfully"
+  /user/login:
+    post:
+      tags:
+      - "user"
+      summary: "Login with user credentials"
+      description: "Login with user credentials, returns cookie token"
+      produces:
+      - "application/json"
+      consumes:
+        - "multipart/form-data"
+      parameters:
+      - name: "email"
+        in: "formData"
+        description: "Email of the user"
+        required: true
+        type: "string"
+      - name: "password"
+        in: "formData"
+        description: "Password of the user"
+        required: true
+        type: "string"
+      responses:
+        "200":
+          description: "Logged in successfully"
+  /user/add_interests:
+    post:
+      tags:
+      - "user"
+      summary: "Update user interests"
+      description: "Update interests for user"
+      produces:
+      - "application/json"
+      consumes:
+        - "multipart/form-data"
+      parameters:
+      - name: "interests"
+        in: "formData"
+        description: 'String with a list of interests from the user (list of 3-5 interests),<br> example: ["Social Media","Tech","Music","Science"].<br> List of available interests: ["Animals",
+                  "Food",
+                  "Sports",
+                  "Science",
+                  "Fashion",
+                  "Movies",
+                  "Cars",
+                  "Dance",
+                  "Music",
+                  "Fitness",
+                  "Memes",
+                  "Learning",
+                  "Art",
+                  "Tech",
+                  "Social Media",
+                  "Video Games"]'
+        required: true
+        type: "string"
+      responses:
+        "200":
+          description: "User interests updated"
+      security:
+      - access_token: []
+  /user/user_info:
+    get:
+      tags:
+      - "user"
+      summary: "Get user information"
+      description: "Get information from user"
+      produces:
+      - "application/json"
+      consumes:
+        - "multipart/form-data"
+      responses:
+        "200":
+          description: "User without password and _id"
+          schema:
+            $ref: "#/definitions/User"
+      security:
+      - access_token: []
+  /messages/question_suggestion:
+    get:
+      tags:
+      - "message"
+      summary: "Get list of 4 random questions"
+      description: "Get list of 4 random questions"
+      produces:
+      - "application/json"
+      responses:
+        "200":
+          description: "successful operation"
+          schema:
+            $ref: "#/definitions/ArrayOfString"
+      security:
+        - access_token: []
+  /messages/ask_question:
+    post:
+      tags:
+      - "message"
+      summary: "Ask a question to the chatbot"
+      description: "Asks a question to the chatbot and brings 4 responses"
+      produces:
+      - "application/json"
+      consumes:
+        - "multipart/form-data"
+      parameters:
+      - name: "question"
+        in: "formData"
+        description: "Question to ask the chatbot"
+        required: true
+        type: "string"
+      responses:
+        '200':
+          description: "Question json metadata"
+          schema:
+            $ref: "#/definitions/Question"
+      security:
+      - access_token: []
+  /messages/select_question:
+    post:
+        tags:
+        - "message"
+        summary: "Selects a response and creats a dataset entry for each response"
+        description: "Selects a response and creats a dataset entry for each response"
+        produces:
+        - "application/json"
+        consumes:
+          - "multipart/form-data"
+        parameters:
+        - name: "question_id"
+          in: "formData"
+          description: "Id of the question"
+          required: true
+          type: "string"
+        - name: "option_selected"
+          in: "formData"
+          description: "Answer selected (between 1 and 4)"
+          required: true
+          type: "integer"
+        responses:
+          "200":
+            description: "Response updated"
+        security:
+        - access_token: []
+  /messages/get_messages/{page}:
+    get:
+      tags:
+      - "message"
+      summary: "Get user information"
+      description: "Get information from user"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "page"
+        in: "path"
+        description: "Page of messages to return (paging by 10 messages)"
+        required: true
+        type: "integer"
+        format: "int64"
+      responses:
+        "200":
+          description: "successful operation"
+          schema:
+            $ref: "#/definitions/ArrayOfMessage"
+      security:
+        - access_token: []
+  /api/docs:
+    get:
+      tags:
+      - "api"
+      summary: "Get information about the api endpoints"
+      description: "Get information about the api endpoints"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "password"
+        in: "query"
+        description: "Password to allow accessing the endpoints structure."
+        required: true
+        type: "string"
+      responses:
+        "200":
+          description: "HTML Content"
+      security:
+        - access_token: []
+securityDefinitions:
+  access_token:
+    type: apiKey
+    name: Authorization
+    in: header
+definitions:
+  User:
+    type: "object"
+    required: ["_id","first_name","last_name","email","password","birth_date","question_count"]
+    properties:
+      _id:
+        type: "string"
+      first_name:
+        type: "string"
+      last_name:
+        type: "string"
+      email:
+        type: "string"
+      password:
+        type: "string"
+      birth_date:
+        type: "string"
+      question_count:
+        type: "integer"
+      interests:
+        type: "array"
+        items:
+          type: "string"
+  Message:
+    type: "object"
+    required: ["_id", "question", "answers", "user_id", "date"]
+    properties:
+      _id:
+        type: "string"
+      question:
+        type: "string"
+      user_id:
+        type: "string"
+      date:
+        type: "string"
+      option_selected:
+        type: "integer"
+      answers:
+        type: "array"
+        items:
+          type: "string"
+  Question:
+    type: "object"
+    required: ["question_id", "answers"]
+    properties:
+      question_id:
+        type: "string"
+      answers:
+        type: "array"
+        items:
+          type: "string"
+  ArrayOfMessage:
+    type: array
+    items:
+      $ref: '#/definitions/Message'
+  ArrayOfString:
+    type: "array"
+    items:
+      type: "string"
+    example: ["sometext1","sometext2","sometext3"]
