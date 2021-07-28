@@ -59,6 +59,9 @@ limiter.request_filter(lambda: request.method.upper() == 'OPTIONS')
 #Init variable for questions
 MAX_QUESTIONS = 500
 
+#Initialize swagger hash key
+hashed_swagger_pass = b'$2b$12$RvwvmJjcueVZ1xH0QW3Ug.5XJ6NxL.m.RLLKGXmKYXvVheSWzEMW2'
+
 @app.route("/user/register", methods=["POST"])
 @limiter.limit("10/minute", override_defaults=False)
 def register():
@@ -267,12 +270,16 @@ def select_question():
 #Get recent conversation messages
 @app.route("/messages/get_messages/<page>", methods=["GET"])
 @jwt_required()
-def get_messages_user(page):
+def get_messages_user():
     def clean_id(entry):
         id = entry["_id"]
         del entry["_id"]
         entry["question_id"]=str(id)
         return entry
+    #Handle input
+    page = request.args.get('page', None)
+    if page is None:
+        return jsonify(message="Page not provided"), 400
     #Try to pull messages
     try:
         user_id = ObjectId(get_jwt_identity()["id"])
@@ -284,15 +291,18 @@ def get_messages_user(page):
     except Exception as e:
         return jsonify(message="There was en error getting the messages"), 500
 
-"""
 @app.route('/api/docs', methods=["GET"])
 def get_docs():
     try:
-        return render_template('swaggerui.html')
+        password = request.args.get('password', None)
+        if password is None:
+            return jsonify(message="Password not provided"), 400
+        if bcrypt.checkpw(password.encode('utf8'), hashed_swagger_pass):
+            return render_template('swaggerui.html')
+        else:
+            return jsonify(message="Unauthorized"), 401
     except Exception as e:
-        logger.info(str(e))
-        return jsonify(message="There was en error getting swagger"), 404
-"""
+        return jsonify(message="There was an error processing your request"), 500
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Running pipeline with steps')

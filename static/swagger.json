@@ -1,7 +1,7 @@
 {
   "swagger": "2.0",
   "info": {
-    "description": "Server endpoints to interact with the chatbot and users in DB.",
+    "description": "Server endpoints to interact with the chatbot and users in DB. To add authentication, make sure you add 'Bearer TOKEN' as the apiKey.",
     "version": "1.0.0",
     "title": "GPT3 Chatbot"
   },
@@ -130,12 +130,9 @@
           {
             "name": "interests",
             "in": "formData",
-            "description": "Interests of the user (list of 3-5 interests)",
+            "description": "String with a list of interests from the user (list of 3-5 interests),<br> example: [\"Social Media\",\"Tech\",\"Music\",\"Science\"].<br> List of available interests: [\"Animals\", \"Food\", \"Sports\", \"Science\", \"Fashion\", \"Movies\", \"Cars\", \"Dance\", \"Music\", \"Fitness\", \"Memes\", \"Learning\", \"Art\", \"Tech\", \"Social Media\", \"Video Games\"]",
             "required": true,
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+            "type": "string"
           }
         ],
         "responses": {
@@ -145,7 +142,7 @@
         },
         "security": [
           {
-            "cookie": []
+            "access_token": []
           }
         ]
       }
@@ -173,32 +170,7 @@
         },
         "security": [
           {
-            "cookie": []
-          }
-        ]
-      }
-    },
-    "/user/logout": {
-      "post": {
-        "tags": [
-          "user"
-        ],
-        "summary": "Logout for user",
-        "description": "Invalidates the user login (cookie)",
-        "produces": [
-          "application/json"
-        ],
-        "consumes": [
-          "multipart/form-data"
-        ],
-        "responses": {
-          "200": {
-            "description": "Logged out"
-          }
-        },
-        "security": [
-          {
-            "cookie": []
+            "access_token": []
           }
         ]
       }
@@ -216,6 +188,15 @@
         "consumes": [
           "multipart/form-data"
         ],
+        "parameters": [
+          {
+            "name": "question",
+            "in": "formData",
+            "description": "Question to ask the chatbot",
+            "required": true,
+            "type": "string"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Question json metadata",
@@ -226,7 +207,7 @@
         },
         "security": [
           {
-            "cookie": []
+            "access_token": []
           }
         ]
       }
@@ -267,7 +248,7 @@
         },
         "security": [
           {
-            "cookie": []
+            "access_token": []
           }
         ]
       }
@@ -299,14 +280,19 @@
               "$ref": "#/definitions/ArrayOfMessage"
             }
           }
-        }
+        },
+        "security": [
+          {
+            "access_token": []
+          }
+        ]
       }
     }
   },
   "securityDefinitions": {
-    "cookie": {
+    "access_token": {
       "type": "apiKey",
-      "name": "Cookie",
+      "name": "Authorization",
       "in": "header"
     }
   },
