@@ -14,6 +14,10 @@
     {
       "name": "message",
       "description": "Operations about messages"
+    },
+    {
+      "name": "api",
+      "description": "Operations about the api"
     }
   ],
   "schemes": [
@@ -279,6 +283,37 @@
             "schema": {
               "$ref": "#/definitions/ArrayOfMessage"
             }
+          }
+        },
+        "security": [
+          {
+            "access_token": []
+          }
+        ]
+      }
+    },
+    "/api/docs": {
+      "get": {
+        "tags": [
+          "api"
+        ],
+        "summary": "Get information about the api endpoints",
+        "description": "Get information about the api endpoints",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "password",
+            "in": "query",
+            "description": "Password to allow accessing the endpoints structure.",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "HTML Content"
           }
         },
         "security": [
