@@ -60,7 +60,7 @@ limiter.request_filter(lambda: request.method.upper() == 'OPTIONS')
 MAX_QUESTIONS = 500
 
 #Initialize swagger hash key
-hashed_swagger_pass = b'$2b$12$RvwvmJjcueVZ1xH0QW3Ug.5XJ6NxL.m.RLLKGXmKYXvVheSWzEMW2'
+hashed_swagger_pass = b'$2b$12$IVjLwTjLBjxV7vjqTY4I2Ob2VqQd5GYlNckRPhM/t/TiFeZeyILUG'
 
 @app.route("/user/register", methods=["POST"])
 @limiter.limit("10/minute", override_defaults=False)
