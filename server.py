@@ -275,7 +275,7 @@ def select_question():
     return jsonify(message="Response updated"), 200
 
 #Get recent conversation messages
-@app.route("/messages/get_messages/<page>", methods=["GET"])
+@app.route("/messages/get_messages", methods=["GET"])
 @jwt_required()
 def get_messages_user():
     def clean_id(entry):
