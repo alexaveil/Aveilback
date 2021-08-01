@@ -194,7 +194,7 @@ paths:
             description: "Response updated"
         security:
         - access_token: []
-  /messages/get_messages/{page}:
+  /messages/get_messages:
     get:
       tags:
       - "message"
@@ -204,7 +204,7 @@ paths:
       - "application/json"
       parameters:
       - name: "page"
-        in: "path"
+        in: "query"
         description: "Page of messages to return (paging by 10 messages)"
         required: true
         type: "integer"
