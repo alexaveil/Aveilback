@@ -43,4 +43,4 @@ For testing doing inference run the following script where $PATH_TO_MODEL_CHECKP
 python -u transformers_pytorch/inference.py --checkpoint_path $PATH_TO_MODEL_CHECKPOINT_FOLDER
 ```
 ## Deploying model to Cloud Run
-Follow instructions in deploy folder readme.
+Follow instructions in deploy folder readme. It is better to deploy from a GCP VM as the deployment can take some time.
