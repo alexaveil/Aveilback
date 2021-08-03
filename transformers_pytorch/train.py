@@ -18,14 +18,14 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader, TensorDataset
 from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint, global_step_from_engine
-from ignite.metrics import Accuracy, Recall, Loss, MetricsLambda, RunningAverage
+from ignite.metrics import Accuracy, Precision, Recall, Loss, MetricsLambda, RunningAverage
 from ignite.contrib.handlers import ProgressBar, PiecewiseLinear
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger, OutputHandler, OptimizerParamsHandler
 from transformers import (T5ForConditionalGeneration, T5Tokenizer, WEIGHTS_NAME, CONFIG_NAME)
 from transformers.optimization import AdamW, Adafactor
 from ignite.utils import to_onehot
 
-SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
+SPECIAL_TOKENS = ["<bos>", "</s>", "<speaker1>", "<speaker2>", "<pad>"]
 MODEL_INPUTS = ["input_ids", "labels"]
 PADDED_INPUTS = ["input_ids", "labels"]
 
@@ -115,10 +115,10 @@ def train():
     parser.add_argument("--max_history", type=int, default=1, help="Number of previous exchanges to keep in history")
     parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training")
     parser.add_argument("--valid_batch_size", type=int, default=2, help="Batch size for validation")
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Accumulate gradients on several steps")
-    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=16, help="Accumulate gradients on several steps")
+    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate") #0.001 + Adafactor
     parser.add_argument("--lm_coef", type=float, default=1, help="LM loss coefficient")
-    parser.add_argument("--max_norm", type=float, default=3, help="Clipping gradient norm")
+    parser.add_argument("--max_norm", type=float, default=1, help="Clipping gradient norm")
     parser.add_argument("--n_epochs", type=int, default=3, help="Number of training epochs")
     parser.add_argument("--personality_permutations", type=int, default=1, help="Number of permutations of personality sentences")
     parser.add_argument("--eval_before_start", action='store_true', help="If true start with a first evaluation before training")
@@ -147,8 +147,11 @@ def train():
     model.to(args.device)
     # Add special tokens if they are not already added
     add_special_tokens_(model, tokenizer)
+    # Issue with eos token: https://github.com/huggingface/transformers/issues/5142
+    tokenizer.add_special_tokens({'eos_token':'</s>'})
     # Finetuning tips for T5: https://discuss.huggingface.co/t/t5-finetuning-tips/684/2
-    optimizer = Adafactor(model.parameters(), scale_parameter=False, relative_step=False, warmup_init=False, lr=args.lr)
+    optimizer = AdamW(model.parameters(), lr=args.lr, correct_bias=True)
+    # optimizer = Adafactor(model.parameters(), scale_parameter=False, relative_step=False, warmup_init=False, lr=args.lr)
 
     # Prepare model for FP16 and distributed training if needed (order is important, distributed should be the last)
     if args.fp16:
@@ -191,7 +194,6 @@ def train():
             output = model(input_ids=input_ids, labels=labels)
             logits = output.logits
 
-            """
             #Get predictions for batch and show results to compare
             batch_size, max_word_size, dictionary_size = logits.shape
             predictions = torch.argmax(logits, dim=-1)
@@ -199,10 +201,11 @@ def train():
             logger.info("Labels: "+tokenizer.decode([0 if x==-100 else x for x in labels[-1, :].tolist()])) #-100 gives error when decoding for labels
             logger.info("Output generated: "+tokenizer.decode(predictions[-1, :].tolist()))
             logger.info("")
-            """
 
-            transposed_logits = torch.transpose(logits,1,2) #Transpose to have the correct format for nll loss
-            return transposed_logits, labels
+            #https://github.com/pytorch/ignite/issues/1991
+            flat_logits = logits.view(-1, logits.size(-1))
+            flat_labels = labels.view(-1)
+            return flat_logits, flat_labels
     evaluator = Engine(inference)
 
     # Attach evaluation to trainer: we evaluate when we start the training and at the end of each epoch
