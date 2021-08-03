@@ -179,20 +179,32 @@ def question_suggestions():
 @app.route("/messages/ask_custom_question", methods=["POST"])
 @jwt_required()
 def ask_custom_question():
-    #Get question from request
-    for key in ["question", "interests"]:
-        if not key in request.form:
-            return jsonify(message="{} not provided".format(key)), 400
+    #TODO: Only have evaluation in this endpoint, not on cloud run
+    #Check for json input on request
+    if not request.is_json:
+        return jsonify(code=403, message="Bad request, should use json")
+    #Check for valid data inside json
+    request_data = request.get_json()
+    if request_data is None:
+        return jsonify(code=403, message="Bad request, should use json")
+    #Check for required data in json content
+    for key in ["question","interests"]:
+        if key not in request_data.keys():
+            return jsonify(code=403, message="Missing {}".format(key))
+    #Get fields
+    question = request_data['question']
+    interests = request_data['interests']
+    if not isinstance(interests, list) or not isinstance(question, str):
+        return jsonify(code=403, message="One of the parameters is incorrect, interests should be a list and question a string")
     #Call cloud run
     try:
         headers = CaseInsensitiveDict()
         headers["Accept"] = "application/json"
         headers["Authorization"] = "Bearer {}".format(config_data["cloudrun"]["auth"])
-        result = requests.post(config_data["cloudrun"]["url"],
-            data = {'question': request.form["question"], 'interests': request.form["interests"]},
+        result = requests.post(config_data["cloudrun"]["url"]+config_data["cloudrun"]["endpoint"],
+            json = {'question': question, 'interests': interests},
             headers = headers)
-        print(result.text)
-        return jsonify(result), 200
+        return jsonify(result.json()), 200
     except Exception as e:
         logger.info(e)
         return jsonify(message="There was an error getting the model response"), 500
