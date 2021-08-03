@@ -22,6 +22,8 @@ import bcrypt
 from flask_jwt_extended import (JWTManager, jwt_required, create_access_token, get_jwt_identity)
 from flask_cors import CORS
 import random
+import requests
+from requests.structures import CaseInsensitiveDict
 
 #Init config to get certificates path
 config_data = get_config_dict()
@@ -172,6 +174,28 @@ def get_user_info():
 @jwt_required()
 def question_suggestions():
     return jsonify(random.sample(question_list, 4)), 200
+
+#Get question suggestions
+@app.route("/messages/ask_custom_question", methods=["POST"])
+@jwt_required()
+def ask_custom_question():
+    #Get question from request
+    for key in ["question", "interests"]:
+        if not key in request.form:
+            return jsonify(message="{} not provided".format(key)), 400
+    #Call cloud run
+    try:
+        headers = CaseInsensitiveDict()
+        headers["Accept"] = "application/json"
+        headers["Authorization"] = "Bearer {}".format(config_data["cloudrun"]["auth"])
+        result = requests.post(config_data["cloudrun"]["url"],
+            data = {'question': request.form["question"], 'interests': request.form["interests"]},
+            headers = headers)
+        print(result.text)
+        return jsonify(result), 200
+    except Exception as e:
+        logger.info(e)
+        return jsonify(message="There was an error getting the model response"), 500
 
 #Ask GPT3 a question
 @app.route("/messages/ask_question", methods=["POST"])
