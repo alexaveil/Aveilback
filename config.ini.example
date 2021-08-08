@@ -13,5 +13,4 @@ path = certificates
 
 [cloudrun]
 url = https://answer-question-custom-otvhii5yna-uc.a.run.app
-auth = AUTH_KEY_GCP
 endpoint = /messages/ask_question

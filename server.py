@@ -24,6 +24,7 @@ from flask_cors import CORS
 import random
 import requests
 from requests.structures import CaseInsensitiveDict
+from deploy.auth import get_cloud_run_token
 
 #Init config to get certificates path
 config_data = get_config_dict()
@@ -182,31 +183,41 @@ def ask_custom_question():
     #TODO: Only have evaluation in this endpoint, not on cloud run
     #Check for json input on request
     if not request.is_json:
-        return jsonify(code=403, message="Bad request, should use json")
+        return jsonify(message="Bad request, should use json"), 403
     #Check for valid data inside json
     request_data = request.get_json()
     if request_data is None:
-        return jsonify(code=403, message="Bad request, should use json")
+        return jsonify(message="Bad request, should use json"), 403
     #Check for required data in json content
     for key in ["question","interests"]:
         if key not in request_data.keys():
-            return jsonify(code=403, message="Missing {}".format(key))
+            return jsonify(message="Missing {}".format(key)), 403
     #Get fields
     question = request_data['question']
     interests = request_data['interests']
     if not isinstance(interests, list) or not isinstance(question, str):
-        return jsonify(code=403, message="One of the parameters is incorrect, interests should be a list and question a string")
+        return jsonify(message="One of the parameters is incorrect, interests should be a list and question a string"), 403
+    #Get token for request
+    try:
+        endpoint_url = config_data["cloudrun"]["url"]+config_data["cloudrun"]["endpoint"]
+        request_token = get_cloud_run_token(endpoint_url)
+    except Exception as e:
+        logger.info(e)
+        return jsonify(message="There was an error getting the credentials for the request."), 500
     #Call cloud run
     try:
         headers = CaseInsensitiveDict()
         headers["Accept"] = "application/json"
-        headers["Authorization"] = "Bearer {}".format(config_data["cloudrun"]["auth"])
-        result = requests.post(config_data["cloudrun"]["url"]+config_data["cloudrun"]["endpoint"],
+        headers["Authorization"] = "Bearer {}".format(request_token)
+        result = None
+        result = requests.post(endpoint_url,
             json = {'question': question, 'interests': interests},
             headers = headers)
         return jsonify(result.json()), 200
     except Exception as e:
         logger.info(e)
+        if result is not None:
+            logger.info(result.text)
         return jsonify(message="There was an error getting the model response"), 500
 
 #Ask GPT3 a question
